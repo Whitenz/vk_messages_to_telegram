@@ -1,1 +1,2 @@
 vk==3.0
+python-dotenv==0.21.0
