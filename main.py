@@ -1,50 +1,68 @@
 import time
+from pprint import pprint
+
 import vk
 
-from config import MEMBER_NAMES, API_VERSION, PEER_ID, TOKEN
+from config import *
 from date_format import get_date
 
 api = vk.API(access_token=TOKEN, v=API_VERSION)
 
 
-def get_history(peer_id, count=200, rev=0, group=False, sleep_time=0.4):
+def get_history_items(peer_id, offset=0, count=200, group=False):
+    peer_id = int(peer_id)
     if group:
-        peer_id = 2000000000 + int(peer_id)
+        peer_id += 2000000000
 
-    time.sleep(sleep_time)
-    return api.messages.getHistory(
-        count=count,
-        peer_id=peer_id,
-        rev=rev,
-    )
+    items = []
+    while True:
+        request = api.messages.getHistory(
+            offset=offset,
+            count=count,
+            peer_id=peer_id,
+            rev=1,
+        )
+        if not request['items']:
+            break
+
+        items.extend(request['items'])
+        offset += 200
+        time.sleep(REQUEST_DELAY)
+
+    return items
 
 
-def get_messages(history: dict) -> list:
-    items = history['items']
-    temp = []
+def get_messages(items: list) -> list:
+    messages = []
 
     for item in items:
         date = get_date(item['date'])
         member = MEMBER_NAMES.get(item['from_id'])
         text = item['text']
         urls = []
-        for attachment in item['attachments']:
-            photo = attachment.get('photo')
-            if photo:
-                urls.append(photo['sizes'][-1]['url'])
 
-        message = f'{date} - {member}: {text}'
-        temp.append(message)
+        if text:
+            messages.append(f'{date} - {member}: {text}')
+
+        for attachment in item['attachments']:
+            if photo := attachment.get('photo'):
+                url = next((photo['sizes'][i]['url'] for i in
+                            range(len(photo['sizes'])) if
+                            photo['sizes'][i]['type'] == 'w'),
+                           photo['sizes'][-1]['url'])
+                urls.append(url)
+
         if urls:
             for url in urls:
-                temp.append(f'{date} - {member}: {url} (файл добавлен)')
+                messages.append(f'{date} - {member}: {url} (файл добавлен)')
 
-    return temp
+    return messages
 
 
 def main():
-    history = get_history(peer_id=PEER_ID, group=True, rev=1)
-    messages = get_messages(history)
+    items = get_history_items(peer_id=PEER_ID, group=GROUP, offset=0)
+    pprint(items)
+    messages = get_messages(items)
 
     with open('messages.txt', 'w') as f:
         for message in messages:
