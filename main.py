@@ -3,6 +3,7 @@ import time
 import ast
 import os
 import datetime
+from typing import Optional
 
 import requests
 import vk
@@ -43,6 +44,7 @@ def get_chat_title(peer_id: int) -> str:
 
     return response['items'][0]['chat_settings']['title']
 
+
 def get_history_items(peer_id: int,
                       offset: int = 0,
                       count: int = 200,
@@ -82,35 +84,58 @@ def parse_messages(items: list, backup_path: str) -> list:
         date = get_date(item['date'])
         member = MEMBER_NAMES.get(item['from_id'], f"id_{item['from_id']}")
         text = item['text']
-        files = []
+        images = []
+        docs = []
 
         if text:
             messages.append(f'{date} - {member}: {text}')
 
         for attachment in item['attachments']:
             if photo := attachment.get('photo'):
-                files.append(get_image_from_message(photo, backup_path))
-        for file in files:
-            messages.append(f'{date} - {member}: {file} (файл добавлен)')
+                images.append(get_image_from_message(photo, backup_path))
+            if doc := attachment.get('doc'):
+                if doc_url := get_doc_url_from_message(doc, backup_path):
+                    docs.append(doc_url)
+
+        for image in images:
+            messages.append(f'{date} - {member}: {image} (файл добавлен)')
+        for doc in docs:
+            messages.append(f'{date} - {member}: {doc} (файл добавлен)')
 
     return messages
 
 
 def get_image_from_message(photo: dict, backup_path: str) -> str:
-    file_name = str(photo['id']) + '.jpg'
-    path_to_file = backup_path + file_name
+    image_name = f"{photo['owner_id']}_{photo['id']}.jpg"
+    path_to_image = backup_path + image_name
     sizes = sorted(photo['sizes'], key=lambda d: d['type'])
     url = next((sizes[i]['url'] for i in range(len(sizes)) if
                 sizes[i]['type'] == 'w'), sizes[-1]['url'])
 
     try:
-        if not os.path.exists(path_to_file):
-            with open(path_to_file, 'wb') as f:
+        if not os.path.exists(path_to_image):
+            with open(path_to_image, 'wb') as f:
                 f.write(requests.get(url).content)
     except Exception as error:
         logger.error(f'Ошибка при скачивании картинки: {error}')
 
-    return file_name
+    return image_name
+
+
+def get_doc_url_from_message(doc: dict, backup_path: str) -> Optional[str]:
+    if doc['type'] in (3, 4):  # тип картинок и gif
+        file_name = f"{doc['owner_id']}_{doc['id']}.jpg"
+        path_to_file = backup_path + file_name
+        url = doc['url']
+
+        try:
+            if not os.path.exists(path_to_file):
+                with open(path_to_file, 'wb') as f:
+                    f.write(requests.get(url).content)
+        except Exception as error:
+            logger.error(f'Ошибка при скачивании файла: {error}')
+
+        return file_name
 
 
 def main():
@@ -123,7 +148,7 @@ def main():
         sys.exit()
     chat_title = get_chat_title(peer_id=PEER_ID)
     history_items = get_history_items(peer_id=PEER_ID,
-                                      offset=0)
+                                      offset=15300)
     backup_path = BASED_DIR + f'/{PEER_ID}/'
 
     if history_items:
