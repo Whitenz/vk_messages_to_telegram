@@ -23,7 +23,7 @@ TOKEN = os.getenv('TOKEN')  # токен вашего приложения VK д
 # например, {0000000: 'Александр Пушкин'}
 MEMBER_NAMES = ast.literal_eval(os.getenv('MEMBER_NAMES'))
 PEER_ID = int(os.getenv('PEER_ID'))  # ID чата VK (+2000000000, если групповой)
-DOC_TYPES = {3: '.jpg', 4: '.gif'}
+DOC_TYPES = {3: '.gif', 4: '.jpg'}
 BACKUP_DIR = f'backup/{PEER_ID}/'
 REGEXP = re.compile(r'\[id\d*\|@\w*]')
 
@@ -156,7 +156,7 @@ def main():
         sys.exit()
 
     chat_title = get_chat_title(peer_id=PEER_ID)
-    history_items = get_history_items(peer_id=PEER_ID, offset=15300)
+    history_items = get_history_items(peer_id=PEER_ID, offset=0)
 
     if history_items:
         if not os.path.exists(BACKUP_DIR) and not os.path.isdir(BACKUP_DIR):
