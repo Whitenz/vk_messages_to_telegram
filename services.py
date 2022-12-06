@@ -1,9 +1,10 @@
 import os
+import sys
 from datetime import datetime
 
 import requests
 
-from config import BACKUP_DIR, logger, TIMEZONE
+from config import BACKUP_DIR, TIMEZONE, logger
 
 
 def format_timestamp(timestamp: str) -> str:
@@ -15,10 +16,10 @@ def format_timestamp(timestamp: str) -> str:
 def download_file(url: str, file_name: str) -> str:
     """Функция скачивает файл по ссылке, возвращает название файла."""
     path_to_file = BACKUP_DIR + file_name
-    try:
-        if not os.path.exists(path_to_file):
+    if not os.path.exists(path_to_file):
+        try:
             with open(path_to_file, 'wb') as f:
                 f.write(requests.get(url).content)
-    except Exception as error:
-        logger.error(f'Ошибка при скачивании или записи файла: {error}')
+        except Exception as error:
+            sys.exit(f'Ошибка при скачивании или записи файла: {error}')
     return file_name

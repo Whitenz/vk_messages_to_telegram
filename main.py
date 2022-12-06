@@ -8,8 +8,8 @@ from typing import Optional
 
 import vk
 
-from config import (API_VERSION, BACKUP_DIR, DOC_TYPES, logger, MEMBER_NAMES,
-                    PEER_ID, REGEXP_USERNAME, REQUEST_DELAY, TOKEN)
+from config import (API_VERSION, BACKUP_DIR, DOC_TYPES, MEMBER_NAMES,
+                    PEER_ID, REGEXP_USERNAME, REQUEST_DELAY, TOKEN, logger)
 from services import download_file, format_timestamp
 
 api = vk.API(access_token=TOKEN, v=API_VERSION)
@@ -26,8 +26,7 @@ def get_chat_title(peer_id: int) -> str:
     try:
         response = api.messages.getConversationsById(peer_ids=peer_id)
     except Exception as error:
-        logger.error(f'Сбой при получении заголовка чата: {error}')
-        sys.exit()
+        sys.exit(f'Сбой при получении заголовка чата: {error}')
     type_chat = response['items'][0]['peer']['type']
     if type_chat == 'chat':
         return response['items'][0]['chat_settings']['title']
@@ -42,8 +41,7 @@ def add_missing_members(peer_id: int, member_names: dict) -> None:
     try:
         response = api.messages.getConversationMembers(peer_id=peer_id)
     except Exception as error:
-        logger.error(f'Сбой при загрузке информации о членах чата: {error}')
-        sys.exit()
+        sys.exit(f'Сбой при загрузке информации о членах чата: {error}')
     for profile in response['profiles']:
         if profile['id'] not in member_names:
             fullname = f"{profile['first_name']} {profile['last_name']}"
@@ -64,12 +62,12 @@ def get_history_items(peer_id: int, offset: int = 0, count: int = 200) -> list:
                                                peer_id=peer_id,
                                                rev=1)
         except Exception as error:
-            logger.error(f'Сбой при загрузке сообщений: {error}')
-            sys.exit()
+            sys.exit(f'Сбой при загрузке сообщений: {error}')
 
         if not response['items']:
             logger.info(f'Все доступные сообщения загружены')
             break
+
         history_items.extend(response['items'])
         logger.info(f'Загружено {len(history_items)} сообщений')
         time.sleep(REQUEST_DELAY)
@@ -79,7 +77,12 @@ def get_history_items(peer_id: int, offset: int = 0, count: int = 200) -> list:
 
 def parse_messages(items: list) -> list:
     """Парсинг истории чата. Возвращает подготовленные сообщения."""
-    messages = []
+    start_date = format_timestamp(items[0]['date'])
+    start_member = MEMBER_NAMES.get(items[0]['from_id'],
+                                    f"id{items[0]['from_id']}")
+    start_message = f'{start_date} - {start_member}: Ожидание сообщения'
+    messages = [start_message]  # для корректного импорта в ТГ
+
     logger.info(f'Провожу парсинг сообщений и скачиваю файлы...')
     logger.info(f'Это может занять много времени и места на диске')
 
@@ -111,7 +114,7 @@ def parse_messages(items: list) -> list:
 def format_text(original_text: str) -> str:
     def convert_name(match_obj):
         member_id = re.search(r'\d+', match_obj.group()).group(0)
-        return MEMBER_NAMES.get(int(member_id), f'id_{member_id}')
+        return MEMBER_NAMES.get(int(member_id), f'id{member_id}')
 
     if REGEXP_USERNAME.search(original_text):
         return re.sub(REGEXP_USERNAME, convert_name, original_text)
@@ -120,13 +123,13 @@ def format_text(original_text: str) -> str:
 
 def get_image_from_message(photo: dict) -> str:
     """
-    Функция вытаскивает из объекта сообщения изображение.
+    Функция вытаскивает из объекта сообщения изображение в наилучшем качестве.
     Возвращает имя изображения.
     """
-    image_name = f"{photo['owner_id']}_{photo['id']}.jpg"
     sizes = sorted(photo['sizes'], key=lambda d: d['type'])
     url = next((sizes[i]['url'] for i in range(len(sizes)) if
                 sizes[i]['type'] == 'w'), sizes[-1]['url'])
+    image_name = f"{photo['owner_id']}_{photo['id']}.jpg"
     return download_file(url, image_name)
 
 
@@ -145,9 +148,8 @@ def main():
     start_time = datetime.now()
 
     if not check_environment_variables():
-        logger.critical('Отсутствуют необходимые переменные окружения. '
-                        'Работа программы завершена')
-        sys.exit()
+        sys.exit('Отсутствуют необходимые переменные окружения. '
+                 'Работа программы завершена')
 
     chat_title = get_chat_title(peer_id=PEER_ID)
     add_missing_members(peer_id=PEER_ID, member_names=MEMBER_NAMES)
@@ -160,15 +162,19 @@ def main():
         messages = parse_messages(history_items)
         message_file = BACKUP_DIR + f'Чат WhatsApp с {chat_title}.txt'
         logger.info(f'Сохраняю сообщения в файл {message_file}')
-        with open(message_file, 'w') as f:
-            for message_file in messages:
-                f.write(f'{message_file}\n')
+
+        try:
+            with open(message_file, 'w') as f:
+                for message_file in messages:
+                    f.write(f'{message_file}\n')
+        except Exception as error:
+            sys.exit(f'Ошибка при записи файла {message_file}: {error}')
+
     else:
         logger.warning(f'В этом чате нет сообщений')
 
     end_time = datetime.now()
-    time_delta = end_time - start_time
-    logger.info(f'Затрачено секунд: {time_delta.total_seconds()}')
+    logger.info(f'Затрачено секунд: {(end_time - start_time).total_seconds()}')
 
 
 if __name__ == '__main__':
