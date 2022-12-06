@@ -1,34 +1,17 @@
+import datetime
+import os
 import re
 import sys
 import time
-import ast
-import os
-import datetime
+from datetime import datetime
 from typing import Optional
 
-import requests
 import vk
-import logging.config
-from dotenv import load_dotenv
 
-from date_format import get_date
+from config import (API_VERSION, BACKUP_DIR, DOC_TYPES, logger, MEMBER_NAMES,
+                    PEER_ID, REGEXP_USERNAME, REQUEST_DELAY, TOKEN)
+from services import download_file, format_timestamp
 
-load_dotenv()
-
-API_VERSION = '5.131'  # версия VK API
-REQUEST_DELAY = 0.4  # задержка между запросами к API
-FILE_MESSAGE_NAME = 'Чат WhatsApp с '
-TOKEN = os.getenv('TOKEN')  # токен вашего приложения VK для доступа к VK API
-# словарь с id членов диалога и имени контакта в телефонной книге
-# например, {0000000: 'Александр Пушкин'}
-MEMBER_NAMES = ast.literal_eval(os.getenv('MEMBER_NAMES'))
-PEER_ID = int(os.getenv('PEER_ID'))  # ID чата VK (+2000000000, если групповой)
-DOC_TYPES = {3: '.gif', 4: '.jpg'}
-BACKUP_DIR = f'backup/{PEER_ID}/'
-REGEXP = re.compile(r'\[id\d*\|@\w*]')
-
-logging.config.fileConfig('logging.conf')
-logger = logging.getLogger(__name__)
 api = vk.API(access_token=TOKEN, v=API_VERSION)
 
 
@@ -75,13 +58,13 @@ def get_history_items(peer_id: int, offset: int = 0, count: int = 200) -> list:
 
 
 def parse_messages(items: list) -> list:
-    """Парсинг объектов истории чата и сохранения бэкапа."""
+    """Парсинг истории чата. Возвращает подготовленные сообщения."""
     messages = []
     logger.info(f'Провожу парсинг сообщений и скачиваю файлы...')
     logger.info(f'Это может занять много времени и места на диске')
 
     for item in items:
-        date = get_date(item['date'])
+        date = format_timestamp(item['date'])
         member = MEMBER_NAMES.get(item['from_id'], f"id_{item['from_id']}")
         text = item['text']
         images = []
@@ -110,13 +93,16 @@ def format_text(original_text: str) -> str:
         member_id = re.search(r'\d+', match_obj.group()).group(0)
         return MEMBER_NAMES.get(int(member_id), f'id_{member_id}')
 
-    if REGEXP.search(original_text):
-        return re.sub(REGEXP, convert_name, original_text)
+    if REGEXP_USERNAME.search(original_text):
+        return re.sub(REGEXP_USERNAME, convert_name, original_text)
     return original_text
 
 
 def get_image_from_message(photo: dict) -> str:
-    """Функция вытаскивает из объекта сообщения изображение."""
+    """
+    Функция вытаскивает из объекта сообщения изображение.
+    Возвращает имя изображения.
+    """
     image_name = f"{photo['owner_id']}_{photo['id']}.jpg"
     sizes = sorted(photo['sizes'], key=lambda d: d['type'])
     url = next((sizes[i]['url'] for i in range(len(sizes)) if
@@ -126,7 +112,7 @@ def get_image_from_message(photo: dict) -> str:
 
 def get_file_from_message(doc: dict) -> Optional[str]:
     """
-    Функция вытаскивает из объекта сообщения файл.
+    Функция вытаскивает из объекта сообщения файл. Возвращает название.
     Если тип файла не указан в словаре DOC_TYPES, то возвращает None.
     """
     if doc['type'] in DOC_TYPES:
@@ -134,21 +120,9 @@ def get_file_from_message(doc: dict) -> Optional[str]:
         return download_file(doc['url'], doc_name)
 
 
-def download_file(url: str, file_name: str) -> str:
-    """Функция скачивает файл по ссылке, возвращает название файла."""
-    path_to_file = BACKUP_DIR + file_name
-    try:
-        if not os.path.exists(path_to_file):
-            with open(path_to_file, 'wb') as f:
-                f.write(requests.get(url).content)
-    except Exception as error:
-        logger.error(f'Ошибка при скачивании или записи файла: {error}')
-    return file_name
-
-
 def main():
     """Основная логика работы приложения."""
-    start_time = datetime.datetime.now()
+    start_time = datetime.now()
 
     if not check_environment_variables():
         logger.critical('Отсутствуют необходимые переменные окружения'
@@ -171,7 +145,7 @@ def main():
     else:
         logger.warning(f'В этом чате нет сообщений')
 
-    end_time = datetime.datetime.now()
+    end_time = datetime.now()
     time_delta = end_time - start_time
     logger.info(f'Затрачено секунд: {time_delta.total_seconds()}')
 
