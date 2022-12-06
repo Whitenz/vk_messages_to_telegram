@@ -17,17 +17,37 @@ api = vk.API(access_token=TOKEN, v=API_VERSION)
 
 def check_environment_variables() -> bool:
     """Функция проверяет доступность необходимых переменных окружения."""
-    return all([TOKEN, MEMBER_NAMES, PEER_ID])
+    return all([TOKEN, PEER_ID])
 
 
 def get_chat_title(peer_id: int) -> str:
     """Функция возвращает заголовок чата для создания файла бэкапа."""
+    logger.info(f'Запрашиваю информацию о чате')
     try:
         response = api.messages.getConversationsById(peer_ids=peer_id)
     except Exception as error:
-        logger.error(f'Чат не найден: {error}')
+        logger.error(f'Сбой при получении заголовка чата: {error}')
         sys.exit()
-    return response['items'][0]['chat_settings']['title']
+    type_chat = response['items'][0]['peer']['type']
+    if type_chat == 'chat':
+        return response['items'][0]['chat_settings']['title']
+    elif type_chat == 'user':
+        return MEMBER_NAMES.get(peer_id, f'id{peer_id}')
+    return f'id{peer_id}'
+
+
+def add_missing_members(peer_id: int, member_names: dict) -> None:
+    """Функция дополняет словарь имен участников чата."""
+    logger.info(f'Подгружаю недостающую информацию о членах чата')
+    try:
+        response = api.messages.getConversationMembers(peer_id=peer_id)
+    except Exception as error:
+        logger.error(f'Сбой при загрузке информации о членах чата: {error}')
+        sys.exit()
+    for profile in response['profiles']:
+        if profile['id'] not in member_names:
+            fullname = f"{profile['first_name']} {profile['last_name']}"
+            member_names |= {profile['id']: fullname}
 
 
 def get_history_items(peer_id: int, offset: int = 0, count: int = 200) -> list:
@@ -65,7 +85,7 @@ def parse_messages(items: list) -> list:
 
     for item in items:
         date = format_timestamp(item['date'])
-        member = MEMBER_NAMES.get(item['from_id'], f"id_{item['from_id']}")
+        member = MEMBER_NAMES.get(item['from_id'], f"id{item['from_id']}")
         text = item['text']
         images = []
         docs = []
@@ -125,11 +145,12 @@ def main():
     start_time = datetime.now()
 
     if not check_environment_variables():
-        logger.critical('Отсутствуют необходимые переменные окружения'
+        logger.critical('Отсутствуют необходимые переменные окружения. '
                         'Работа программы завершена')
         sys.exit()
 
     chat_title = get_chat_title(peer_id=PEER_ID)
+    add_missing_members(peer_id=PEER_ID, member_names=MEMBER_NAMES)
     history_items = get_history_items(peer_id=PEER_ID, offset=0)
 
     if history_items:
