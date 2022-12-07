@@ -3,12 +3,13 @@ import os
 import re
 import sys
 import time
+from argparse import Namespace
 from datetime import datetime
 from typing import Optional
 
 import vk
 
-from config import (API_VERSION, BACKUP_DIR, DOC_TYPES, MEMBER_NAMES,
+from config import (API_VERSION, BACKUP_DIR, DOC_TYPES, get_args, MEMBER_NAMES,
                     PEER_ID, REGEXP_USERNAME, REQUEST_DELAY, TOKEN, logger)
 from services import download_file, format_timestamp
 
@@ -75,7 +76,7 @@ def get_history_items(peer_id: int, offset: int = 0, count: int = 200) -> list:
     return history_items
 
 
-def parse_messages(items: list) -> list:
+def parse_messages(items: list, args: Namespace) -> list:
     """Парсинг истории чата. Возвращает подготовленные сообщения."""
     start_date = format_timestamp(items[0]['date'])
     start_member = MEMBER_NAMES.get(items[0]['from_id'],
@@ -93,13 +94,12 @@ def parse_messages(items: list) -> list:
         images = []
         docs = []
 
-        if text:
+        if args.text and text:
             messages.append(f'{date} - {member}: {format_text(text)}')
-
         for attachment in item['attachments']:
-            if photo := attachment.get('photo'):
+            if args.photo and (photo := attachment.get('photo')):
                 images.append(get_image_from_message(photo))
-            if doc := attachment.get('doc'):
+            if args.doc and (doc := attachment.get('doc')):
                 if doc_url := get_file_from_message(doc):
                     docs.append(doc_url)
 
@@ -146,7 +146,7 @@ def get_file_from_message(doc: dict) -> Optional[str]:
 def main():
     """Основная логика работы приложения."""
     start_time = datetime.now()
-
+    args = get_args()
     if not check_environment_variables():
         sys.exit('Отсутствуют необходимые переменные окружения. '
                  'Работа программы завершена')
@@ -159,16 +159,15 @@ def main():
         if not os.path.exists(BACKUP_DIR) and not os.path.isdir(BACKUP_DIR):
             os.makedirs(BACKUP_DIR)
 
-        messages = parse_messages(history_items)
+        messages = parse_messages(history_items, args)
         message_file = BACKUP_DIR + f'Чат WhatsApp с {chat_title}.txt'
         logger.info(f'Сохраняю сообщения в файл {message_file}')
 
         try:
-            with open(message_file, 'w') as f:
-                for message_file in messages:
-                    f.write(f'{message_file}\n')
+            with open(message_file, mode='w', encoding='utf-8') as f:
+                f.write('\n'.join(messages))
         except Exception as error:
-            sys.exit(f'Ошибка при записи файла {message_file}: {error}')
+            sys.exit(f'Ошибка при записи в файл {message_file}: {error}')
 
     else:
         logger.warning(f'В этом чате нет сообщений')

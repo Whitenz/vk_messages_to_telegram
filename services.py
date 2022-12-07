@@ -4,7 +4,7 @@ from datetime import datetime
 
 import requests
 
-from config import BACKUP_DIR, TIMEZONE, logger
+from config import BACKUP_DIR, TIMEZONE
 
 
 def format_timestamp(timestamp: str) -> str:
