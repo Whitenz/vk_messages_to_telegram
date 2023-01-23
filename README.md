@@ -42,11 +42,11 @@
 </details>
 
 #### Клонировать репозиторий:
-```
+```shell
 git clone https://github.com/Whitenz/vk_messages_to_telegram.git
 ```
 
-```
+```shell
 cd vk_messages_to_telegram
 ```
 
@@ -64,7 +64,7 @@ cd vk_messages_to_telegram
 </details>
 
 #### Установить зависимости:
-```
+```shell
 pip install -r requirements.txt
 ```
 
@@ -73,7 +73,7 @@ pip install -r requirements.txt
 по ссылке https://vkhost.github.io Там же есть простая инструкция.
 
 #### Создать файл .env с переменными окружения:
-```
+```shell
 touch .env &&
 echo TOKEN='ваш токен VK' > .env &&
 echo PEER_ID=id чата >> .env &&
@@ -86,8 +86,8 @@ echo YOUR_TIMEZONE=часовой пояс относительно UTC >> .env
 
 #### Запустить модуль main.py с нужными аргументами
 Следующая команда создаст бэкап с текстом, фотографиями и файлами-изображений:
-```
-python main.py --text --photo --doc # скачаете
+```shell
+python main.py --text --photo --doc # загружает текст, фото и файлы изображений
 ```
 
 Учтите, что загрузка файлов может занять много времени и места на диске.
