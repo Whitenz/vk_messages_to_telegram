@@ -126,9 +126,8 @@ def get_image_from_message(photo: dict) -> str:
     Функция вытаскивает из объекта сообщения изображение в наилучшем качестве.
     Возвращает имя изображения.
     """
-    sizes = sorted(photo['sizes'], key=lambda d: d['type'])
-    url = next((sizes[i]['url'] for i in range(len(sizes)) if
-                sizes[i]['type'] == 'w'), sizes[-1]['url'])
+    max_size = max(photo['sizes'], key=lambda x: x['width'])
+    url = max_size['url']
     image_name = f"{photo['owner_id']}_{photo['id']}.jpg"
     return download_file(url, image_name)
 
